@@ -4,7 +4,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 -- Tạo Cửa sổ chính
 local Window = Rayfield:CreateWindow({
    Name = "Banana Mini v3 🍌",
-   LoadingTitle = "Đang khởi tạo Menu...",
+   LoadingTitle = "Đang kết nối dữ liệu...",
    LoadingSubtitle = "by Leminluan",
    ConfigurationSaving = { Enabled = false },
    KeySystem = false
@@ -15,50 +15,75 @@ _G.AutoFarm = false
 _G.AutoEgg = false
 _G.SelectedEgg = "Nemak"
 
--- Hàm tìm con quái gần nhân vật nhất trong Workspace
-local function getClosestMonster()
+-- Hàm tìm ID của con quái gần nhất
+local function getClosestMonsterData()
     local maxDistance = math.huge
-    local targetMonster = nil
+    local targetMonsterId = nil
     local player = game.Players.LocalPlayer
     
-    -- Kiểm tra nếu nhân vật tồn tại
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         local myPos = player.Character.HumanoidRootPart.Position
         
-        -- Duyệt qua thư mục chứa quái (Thường là workspace.Monsters hoặc workspace.Enemies hoặc trực tiếp trong workspace)
-        -- Ở đây quét trong một số folder phổ biến của game Simulator
-        local foldersToScan = {workspace, workspace:FindFirstChild("Monsters"), workspace:FindFirstChild("Enemies"), workspace:FindFirstChild("Mobs")}
-        
-        for _, folder in pairs(foldersToScan) do
-            if folder then
-                for _, monster in pairs(folder:GetChildren()) do
-                    -- Kiểm tra xem có phải là Quái vật hợp lệ không (có máu và có vị trí)
-                    if monster:IsA("Model") and monster:FindFirstChild("HumanoidRootPart") and monster ~= player.Character then
-                        -- Tránh quét nhầm vào Pet hoặc người chơi khác nếu game để chung trong workspace
-                        if not game.Players:GetPlayerFromCharacter(monster) and not monster:FindFirstChild("PetInGame") then 
-                            local distance = (monster.HumanoidRootPart.Position - myPos).magnitude
-                            if distance < maxDistance then
-                                maxDistance = distance
-                                targetMonster = monster
-                            end
+        -- Quét tất cả các folder quái có thể có trong game
+        for _, v in pairs(workspace:GetDescendants()) do
+            -- Tìm các Model có máu và không phải người chơi/pet
+            if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v ~= player.Character then
+                if not game.Players:GetPlayerFromCharacter(v) and not v:FindFirstChild("Pet") then
+                    
+                    local distance = (v.HumanoidRootPart.Position - myPos).magnitude
+                    if distance < maxDistance then
+                        -- Kiểm tra xem ID nằm ở tên Model hay Attribute
+                        local monsterId = v:GetAttribute("Id") or v:GetAttribute("ID") or v.Name
+                        
+                        -- Chỉ lấy nếu chuỗi có định dạng ID dài (chứa dấu gạch ngang giống mã của bạn)
+                        if monsterId and string.find(monsterId, "-") then
+                            maxDistance = distance
+                            targetMonsterId = monsterId
+                        elseif v.Name and string.find(v.Name, "-") then
+                            maxDistance = distance
+                            targetMonsterId = v.Name
                         end
                     end
                 end
             end
         end
     end
-    return targetMonster
+    return targetMonsterId
+end
+
+-- Hàm tự động lấy ID tất cả Pet/Đội hình đang trang bị của bạn
+local function getMySquadIds()
+    local squad = {}
+    pcall(function()
+        -- Quét trong thư mục lưu trữ Pet của người chơi (Thường nằm ở LocalPlayer)
+        -- Hoặc quét các Model pet đang đi theo nhân vật trong Workspace
+        local myName = game.Players.LocalPlayer.Name
+        for _, v in pairs(workspace:GetChildren()) do
+            if v:IsA("Model") and v:GetAttribute("Owner") == myName or v.Name == myName .."'s Pet" then
+                local petId = v:GetAttribute("Id") or v.Name
+                if petId and string.find(petId, "-") then
+                    table.insert(squad, petId)
+                end
+            end
+        end
+        
+        -- Nếu không quét được ngoài workspace, dự phòng điền mã test của bạn để không bị lỗi trống bảng
+        if #squad == 0 then
+            table.insert(squad, "b93c8bcc-e41e-4399-ba53-3b3844fe1e41") 
+        end
+    end)
+    return squad
 end
 
 ---------------------------------------------------------
--- TAB 1: AUTO FARM (CẬP NHẬT TỰ TÌM QUÁI)
+-- TAB 1: AUTO FARM (ĐÃ SỬA THEO REMOTE CHUẨN)
 ---------------------------------------------------------
 local FarmTab = Window:CreateTab("Auto Farm ⚔️", 4483345998)
 
 FarmTab:CreateSection("Cày Cấp Đội Hình")
 
 FarmTab:CreateToggle({
-   Name = "Auto Tìm & Cho Đội Hình Đánh Quái",
+   Name = "Auto Cho Toàn Đội Đánh Quái Gần Nhất",
    CurrentValue = false,
    Flag = "ToggleAutoFarm",
    Callback = function(Value)
@@ -66,26 +91,29 @@ FarmTab:CreateToggle({
       if Value then
          task.spawn(function()
             while _G.AutoFarm do
-               local monster = getClosestMonster()
-               if monster then
-                  -- Di chuyển nhân vật đến gần quái (nếu cần thiết để pet/đội hình tương tác)
-                  -- game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = monster.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
-
+               local monsterId = getClosestMonsterData()
+               local mySquad = getMySquadIds()
+               
+               if monsterId and #mySquad > 0 then
                   pcall(function()
-                     local remoContainer = game:GetService("ReplicatedStorage"):WaitForChild("rbxts_include"):WaitForChild("node_modules"):WaitForChild("@rbxts"):WaitForChild("remo"):WaitForChild("src"):WaitForChild("container")
+                     -- Sử dụng chính xác đường dẫn Remote bạn gửi
+                     local args = {
+                         [1] = monsterId, -- ID quái quét được
+                         [2] = mySquad    -- Danh sách ID đội hình của bạn
+                     }
                      
-                     -- CÁC HƯỚNG CẤU HÌNH REMOTE CHUYỂN TARGET CHO ĐỘI HÌNH:
-                     if remoContainer:FindFirstChild("click") then
-                        -- Gửi mục tiêu là con quái vừa tìm được để toàn đội lao vào
-                        remoContainer:FindFirstChild("click"):InvokeServer(monster)
-                     elseif remoContainer:FindFirstChild("monster.attack") then
-                        remoContainer:FindFirstChild("monster.attack"):InvokeServer(monster)
-                     elseif remoContainer:FindFirstChild("combat.target") then
-                        remoContainer:FindFirstChild("combat.target"):InvokeServer({["monster"] = monster})
-                     end
+                     game:GetService("ReplicatedStorage")
+                        :WaitForChild("rbxts_include")
+                        :WaitForChild("node_modules")
+                        :WaitForChild("@rbxts")
+                        :WaitForChild("remo")
+                        :WaitForChild("src")
+                        :WaitForChild("container")
+                        :WaitForChild("enemies.sendAndRetreat")
+                        :FireServer(unpack(args))
                   end)
                end
-               task.wait(0.2) -- Giãn cách thời gian ra lệnh để toàn đội kịp đánh một lượt và tránh lag
+               task.wait(0.3) -- Giãn cách 0.3 giây mỗi lượt ra lệnh để mượt mà
             end
          end)
       end
@@ -145,11 +173,4 @@ MiscTab:CreateSlider({
          game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = Value
       end
    end,
-})
-
-Rayfield:Notify({
-   Title = "Banana Mini Hoàn Tất!",
-   Content = "Đã cập nhật hệ thống tự tìm quái thông minh.",
-   Duration = 5,
-   Image = 4483345998,
 })
