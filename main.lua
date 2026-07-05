@@ -1,81 +1,50 @@
--- Tải thư viện giao diện Orion (Bản sửa lỗi hiển thị)
-local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
-
--- SỬA LỖI: Tắt SaveConfig và ConfigFolder để tránh bị kẹt do trùng tên Repository
-local Window = OrionLib:MakeWindow({
-    Name = "Banana Mini 🍌", 
-    HidePremium = true, 
-    SaveConfig = false, -- Đổi thành false
-    IntroText = "Loading Mini AW2..."
-})
+-- Tải thư viện Kavo UI (Thay thế cho Orion bị lỗi 404)
+local KavoLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
+-- Tạo cửa sổ chính với giao diện Dark Theme cực chất
+local Window = KavoLib.CreateLib("Banana Mini 🍌", "DarkTheme")
 
 -- Biến quản lý trạng thái
 _G.AutoEgg = false
 _G.SelectedEgg = "Nemak"
 
--- Tạo Tab Mở Trứng
-local EggTab = Window:MakeTab({
-    Name = "Mở Trứng",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
+-- TAB 1: MỞ TRỨNG
+local EggTab = Window:NewTab("Mở Trứng")
+local EggSection = EggTab:NewSection("Cấu Hình Auto Egg")
 
--- Chức năng chọn loại trứng
-EggTab:AddDropdown({
-    Name = "Chọn Thế Giới/Trứng",
-    Default = "Nemak",
-    Options = {"Nemak", "Earth", "Saiyan", "Namek", "Frieza"},
-    Callback = function(Value)
-        _G.SelectedEgg = Value
-    end    
-})
+-- Chức năng chọn loại trứng (Dropdown)
+EggSection:NewDropdown("Chọn Thế Giới/Trứng", "Chọn map bạn muốn mở trứng", {"Nemak", "Earth", "Saiyan", "Namek", "Frieza"}, function(currentOption)
+    _G.SelectedEgg = currentOption
+    print("Đã chọn trứng: " .. currentOption)
+end)
 
--- Nút Bật/Tắt Auto Mở Trứng
-EggTab:AddToggle({
-    Name = "Tự Động Mở Trứng",
-    Default = false,
-    Callback = function(Value)
-        _G.AutoEgg = Value
-        
-        if Value then
-            task.spawn(function()
-                while _G.AutoEgg do
-                    local args = {
-                        [1] = _G.SelectedEgg
-                    }
+-- Chức năng Bật/Tắt Auto mở (Toggle)
+EggSection:NewToggle("Tự Động Mở Trứng", "Bật để tự động spam mở trứng", function(state)
+    _G.AutoEgg = state
+    
+    if state then
+        task.spawn(function()
+            while _G.AutoEgg do
+                local args = {
+                    [1] = _G.SelectedEgg
+                }
 
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("rbxts_include"):WaitForChild("node_modules"):WaitForChild("@rbxts"):WaitForChild("remo"):WaitForChild("src"):WaitForChild("container"):WaitForChild("eggs.open"):InvokeServer(unpack(args))
-                    end)
+                pcall(function()
+                    game:GetService("ReplicatedStorage"):WaitForChild("rbxts_include"):WaitForChild("node_modules"):WaitForChild("@rbxts"):WaitForChild("remo"):WaitForChild("src"):WaitForChild("container"):WaitForChild("eggs.open"):InvokeServer(unpack(args))
+                end)
 
-                    task.wait(0.5)
-                end
-            end)
-        end
-    end    
-})
+                task.wait(0.5) -- Thời gian chờ (0.5 giây)
+            end
+        end)
+    end
+end)
 
--- Tab Tiện ích nhân vật
-local MiscTab = Window:MakeTab({
-    Name = "Nhân Vật",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
+-- TAB 2: NHÂN VẬT (MISC)
+local MiscTab = Window:NewTab("Nhân Vật")
+local MiscSection = MiscTab:NewSection("Thông Số")
 
-MiscTab:AddSlider({
-    Name = "Tốc độ chạy",
-    Min = 16,
-    Max = 300,
-    Default = 16,
-    Color = Color3.fromRGB(255,255,255),
-    Increment = 1,
-    ValueName = "Speed",
-    Callback = function(Value)
-        if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
-            game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = Value
-        end
-    end    
-})
-
--- Khởi tạo Menu
-OrionLib:Init()
+-- Thanh trượt tăng tốc độ chạy (Slider)
+MiscSection:NewSlider("Tốc Độ Chạy", "Kéo để thay đổi WalkSpeed", 300, 16, function(s) -- Max là 300, Min là 16
+    if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+        game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = s
+    end
+end)
