@@ -4,7 +4,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 -- Tạo Cửa sổ chính
 local Window = Rayfield:CreateWindow({
    Name = "Banana Mini v3 🍌",
-   LoadingTitle = "Đang kết nối dữ liệu...",
+   LoadingTitle = "Đang hack dữ liệu game...",
    LoadingSubtitle = "by Leminluan",
    ConfigurationSaving = { Enabled = false },
    KeySystem = false
@@ -15,75 +15,50 @@ _G.AutoFarm = false
 _G.AutoEgg = false
 _G.SelectedEgg = "Nemak"
 
--- Hàm tìm ID của con quái gần nhất
-local function getClosestMonsterData()
+-- Hàm quét và lấy đối tượng con quái gần nhất (Sửa đổi để quét sâu vào cấu trúc game)
+local function getClosestMonsterObject()
     local maxDistance = math.huge
-    local targetMonsterId = nil
+    local targetMonster = nil
     local player = game.Players.LocalPlayer
     
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         local myPos = player.Character.HumanoidRootPart.Position
         
-        -- Quét tất cả các folder quái có thể có trong game
+        -- Quét toàn bộ workspace để tìm bất kỳ Model nào có thuộc tính quái vật
         for _, v in pairs(workspace:GetDescendants()) do
-            -- Tìm các Model có máu và không phải người chơi/pet
             if v:IsA("Model") and v:FindFirstChild("HumanoidRootPart") and v ~= player.Character then
-                if not game.Players:GetPlayerFromCharacter(v) and not v:FindFirstChild("Pet") then
-                    
-                    local distance = (v.HumanoidRootPart.Position - myPos).magnitude
-                    if distance < maxDistance then
-                        -- Kiểm tra xem ID nằm ở tên Model hay Attribute
-                        local monsterId = v:GetAttribute("Id") or v:GetAttribute("ID") or v.Name
-                        
-                        -- Chỉ lấy nếu chuỗi có định dạng ID dài (chứa dấu gạch ngang giống mã của bạn)
-                        if monsterId and string.find(monsterId, "-") then
+                -- Loại trừ người chơi khác và Pet
+                if not game.Players:GetPlayerFromCharacter(v) and not v:FindFirstChild("Pet") and not v.Name:find(player.Name) then
+                    -- Kiểm tra nếu Model này có các thuộc tính nhận diện quái (Máu hoặc Cấu trúc hiển thị)
+                    if v:FindFirstChild("Humanoid") or v:FindFirstChild("Configuration") or v:GetAttribute("Id") then
+                        local distance = (v.HumanoidRootPart.Position - myPos).magnitude
+                        if distance < maxDistance then
                             maxDistance = distance
-                            targetMonsterId = monsterId
-                        elseif v.Name and string.find(v.Name, "-") then
-                            maxDistance = distance
-                            targetMonsterId = v.Name
+                            targetMonster = v
                         end
                     end
                 end
             end
         end
     end
-    return targetMonsterId
+    return targetMonster
 end
 
--- Hàm tự động lấy ID tất cả Pet/Đội hình đang trang bị của bạn
-local function getMySquadIds()
-    local squad = {}
-    pcall(function()
-        -- Quét trong thư mục lưu trữ Pet của người chơi (Thường nằm ở LocalPlayer)
-        -- Hoặc quét các Model pet đang đi theo nhân vật trong Workspace
-        local myName = game.Players.LocalPlayer.Name
-        for _, v in pairs(workspace:GetChildren()) do
-            if v:IsA("Model") and v:GetAttribute("Owner") == myName or v.Name == myName .."'s Pet" then
-                local petId = v:GetAttribute("Id") or v.Name
-                if petId and string.find(petId, "-") then
-                    table.insert(squad, petId)
-                end
-            end
-        end
-        
-        -- Nếu không quét được ngoài workspace, dự phòng điền mã test của bạn để không bị lỗi trống bảng
-        if #squad == 0 then
-            table.insert(squad, "b93c8bcc-e41e-4399-ba53-3b3844fe1e41") 
-        end
-    end)
-    return squad
+-- Hàm lấy ID Đội hình/Pet dự phòng từ lệnh bạn bắt được
+local function getPetId()
+    -- Trả về mã Pet mặc định bạn đã bắt được để đảm bảo lệnh luôn thực thi thành công
+    return "b93c8bcc-e41e-4399-ba53-3b3844fe1e41"
 end
 
 ---------------------------------------------------------
--- TAB 1: AUTO FARM (ĐÃ SỬA THEO REMOTE CHUẨN)
+-- TAB 1: AUTO FARM + TELEPORT (SIÊU CẤP)
 ---------------------------------------------------------
 local FarmTab = Window:CreateTab("Auto Farm ⚔️", 4483345998)
 
-FarmTab:CreateSection("Cày Cấp Đội Hình")
+FarmTab:CreateSection("Cày Cấp & Teleport")
 
 FarmTab:CreateToggle({
-   Name = "Auto Cho Toàn Đội Đánh Quái Gần Nhất",
+   Name = "Auto Teleport + Đội Hình Diệt Quái",
    CurrentValue = false,
    Flag = "ToggleAutoFarm",
    Callback = function(Value)
@@ -91,29 +66,42 @@ FarmTab:CreateToggle({
       if Value then
          task.spawn(function()
             while _G.AutoFarm do
-               local monsterId = getClosestMonsterData()
-               local mySquad = getMySquadIds()
+               local monster = getClosestMonsterObject()
                
-               if monsterId and #mySquad > 0 then
-                  pcall(function()
-                     -- Sử dụng chính xác đường dẫn Remote bạn gửi
-                     local args = {
-                         [1] = monsterId, -- ID quái quét được
-                         [2] = mySquad    -- Danh sách ID đội hình của bạn
-                     }
+               if monster and monster:FindFirstChild("HumanoidRootPart") then
+                  local playerTransform = game.Players.LocalPlayer.Character
+                  
+                  if playerTransform and playerTransform:FindFirstChild("HumanoidRootPart") then
+                     -- CHỨC NĂNG TELEPORT: Bay thẳng đến phía trên đầu con quái 5 Studs để tránh bị kẹt dưới đất
+                     playerTransform.HumanoidRootPart.CFrame = monster.HumanoidRootPart.CFrame * CFrame.new(0, 5, 0)
                      
-                     game:GetService("ReplicatedStorage")
-                        :WaitForChild("rbxts_include")
-                        :WaitForChild("node_modules")
-                        :WaitForChild("@rbxts")
-                        :WaitForChild("remo")
-                        :WaitForChild("src")
-                        :WaitForChild("container")
-                        :WaitForChild("enemies.sendAndRetreat")
-                        :FireServer(unpack(args))
-                  end)
+                     -- Lấy ID ẩn của con quái (Nếu game lưu ở thuộc tính Id, không thì lấy tên Model)
+                     local monsterId = monster:GetAttribute("Id") or monster.Name
+                     local petId = getPetId()
+                     
+                     pcall(function()
+                        -- Thực thi chính xác gói tin sendAndRetreat của bạn
+                        local args = {
+                            [1] = monsterId,
+                            [2] = {
+                                [1] = petId
+                            }
+                        }
+                        
+                        game:GetService("ReplicatedStorage")
+                           :WaitForChild("rbxts_include")
+                           :WaitForChild("node_modules")
+                           :WaitForChild("@rbxts")
+                           :WaitForChild("remo")
+                           :WaitForChild("src")
+                           :Workspace
+                           :WaitForChild("container")
+                           :WaitForChild("enemies.sendAndRetreat")
+                           :FireServer(unpack(args))
+                     end)
+                  end
                end
-               task.wait(0.3) -- Giãn cách 0.3 giây mỗi lượt ra lệnh để mượt mà
+               task.wait(0.2) -- Tốc độ dọn quái và bay (0.2 giây một lần)
             end
          end)
       end
